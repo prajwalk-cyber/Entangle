@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "611186570398",
+    "project_id": "entangle-32c36",
+    "storage_bucket": "entangle-32c36.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:611186570398:android:d9f3494f16d6b0ec92378f",
+        "android_client_info": {
+          "package_name": "com.example.entangle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5MafIDnJFvmiJ4Hv9q7Rpl326CirmiPI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
