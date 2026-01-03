@@ -8,6 +8,7 @@ package com.example.entangle.navigation
 sealed class Screen(val route: String) {
     object Setup : Screen("setup")
     object UserList : Screen("user_list")
+    object Settings : Screen("settings")
     data class Chat(val peerUid: String) : Screen("chat/{peerUid}") {
         companion object {
             const val route = "chat/{peerUid}"

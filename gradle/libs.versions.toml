@@ -11,6 +11,10 @@ composeBom = "2024.09.00"
 googleGmsGoogleServices = "4.4.4"
 firebaseAuth = "24.0.1"
 firebaseFirestore = "26.0.2"
+firebaseStorage = "21.0.1"
+identityJvm = "202411.1"
+cameraCamera2Pipe = "1.6.0-alpha02"
+
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -29,6 +33,10 @@ androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-te
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseAuth" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
+firebase-storage = { group = "com.google.firebase", name = "firebase-storage", version.ref = "firebaseStorage" }
+identity-jvm = { group = "com.android.identity", name = "identity-jvm", version.ref = "identityJvm" }
+androidx-camera-camera2-pipe = { group = "androidx.camera", name = "camera-camera2-pipe", version.ref = "cameraCamera2Pipe" }
+
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

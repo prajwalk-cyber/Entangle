@@ -13,14 +13,16 @@ data class Session(
     val sessionId: String = "",
     val userA: String = "",
     val userB: String = "",
-    val createdAt: Timestamp = Timestamp.now()
+    val createdAt: Timestamp = Timestamp.now(),
+    val pinnedMessageId: String? = null
 ) {
     fun toMap(): Map<String, Any> {
         return mapOf(
             "userA" to userA,
             "userB" to userB,
-            "createdAt" to createdAt
-        )
+            "createdAt" to createdAt,
+            "pinnedMessageId" to pinnedMessageId
+        ) as Map<String, Any>
     }
     
     companion object {
