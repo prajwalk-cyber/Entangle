@@ -55,6 +55,7 @@ dependencies {
     // Firebase
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.storage)
     
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.7")
@@ -62,6 +63,9 @@ dependencies {
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    
+    // Lifecycle for presence tracking
+    implementation("androidx.lifecycle:lifecycle-process:2.7.0")
     
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
@@ -72,6 +76,8 @@ dependencies {
     
     // Icons
     implementation("androidx.compose.material:material-icons-extended:1.6.3")
+    implementation(libs.identity.jvm)
+    implementation(libs.androidx.camera.camera2.pipe)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

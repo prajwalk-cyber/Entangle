@@ -1,6 +1,7 @@
 package com.example.entangle.viewmodel
 
 import android.app.Application
+import android.util.Base64
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,7 +16,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
+import android.net.Uri
+import java.io.InputStream
+import android.content.ContentResolver
+import android.provider.OpenableColumns
 
 /**
  * ChatViewModel: End-to-End Encrypted Messaging
@@ -45,6 +51,19 @@ class ChatViewModel(application: Application, private val peerUid: String) : And
     
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    // Search state
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _isSearchMode = MutableStateFlow(false)
+    val isSearchMode: StateFlow<Boolean> = _isSearchMode.asStateFlow()
+
+    private val _searchResultIndices = MutableStateFlow<List<Int>>(emptyList())
+    val searchResultIndices: StateFlow<List<Int>> = _searchResultIndices.asStateFlow()
+
+    private val _currentSearchIndex = MutableStateFlow(-1)
+    val currentSearchIndex: StateFlow<Int> = _currentSearchIndex.asStateFlow()
     
     private var sessionId: String? = null
     private var sessionKey: ByteArray? = null
@@ -228,6 +247,23 @@ class ChatViewModel(application: Application, private val peerUid: String) : And
                             )
                             val plaintext = HybridCrypto.decrypt(encryptedMsg, key)
                             Log.d("ChatViewModel", "Message decrypted successfully: $plaintext")
+                            
+                            // Update message status if it's from peer
+                            if (msg.senderId != currentUid) {
+                                // Mark as delivered if not already
+                                if (msg.status == "SENT") {
+                                    viewModelScope.launch {
+                                        repository.markMessageAsDelivered(session, msg.messageId)
+                                    }
+                                }
+                                // Mark as read (user is viewing chat)
+                                if (msg.status != "READ") {
+                                    viewModelScope.launch {
+                                        repository.markMessageAsRead(session, msg.messageId)
+                                    }
+                                }
+                            }
+                            
                             msg.copy(decryptedText = plaintext)
                         } catch (e: Exception) {
                             Log.e("ChatViewModel", "Decryption failed for message ${msg.messageId}", e)
@@ -334,5 +370,187 @@ class ChatViewModel(application: Application, private val peerUid: String) : And
     fun getCurrentUserId(): String {
         Log.d("ChatViewModel", "getCurrentUserId: currentUid='$currentUid'")
         return currentUid
+    }
+
+    // ==================== SEARCH FUNCTIONALITY ====================
+
+    /**
+     * Toggle search mode
+     */
+    fun setSearchMode(enabled: Boolean) {
+        _isSearchMode.value = enabled
+        if (!enabled) {
+            _searchQuery.value = ""
+            _searchResultIndices.value = emptyList()
+            _currentSearchIndex.value = -1
+        }
+    }
+
+    /**
+     * Update search query and find matches
+     */
+    fun onSearchQueryChange(query: String) {
+        _searchQuery.value = query
+        if (query.isBlank()) {
+            _searchResultIndices.value = emptyList()
+            _currentSearchIndex.value = -1
+            return
+        }
+
+        val matches = mutableListOf<Int>()
+        _messages.value.forEachIndexed { index, message ->
+            val text = message.decryptedText ?: ""
+            if (text.contains(query, ignoreCase = true)) {
+                matches.add(index)
+            }
+        }
+        
+        _searchResultIndices.value = matches
+        if (matches.isNotEmpty()) {
+            _currentSearchIndex.value = 0
+        } else {
+            _currentSearchIndex.value = -1
+        }
+    }
+
+    /**
+     * Navigate to next search result
+     */
+    fun navigateToNextResult() {
+        val matches = _searchResultIndices.value
+        if (matches.isEmpty()) return
+        
+        _currentSearchIndex.value = (_currentSearchIndex.value + 1) % matches.size
+    }
+
+    /**
+     * Navigate to previous search result
+     */
+    fun navigateToPreviousResult() {
+        val matches = _searchResultIndices.value
+        if (matches.isEmpty()) return
+        
+        _currentSearchIndex.value = if (_currentSearchIndex.value <= 0) {
+            matches.size - 1
+        } else {
+            _currentSearchIndex.value - 1
+        }
+    }
+
+    // ==================== REACTION FUNCTIONALITY ====================
+
+    /**
+     * Toggle reaction on a message
+     */
+    fun toggleReaction(message: Message, emoji: String) {
+        val session = sessionId ?: return
+        val currentReaction = message.reactions[currentUid]
+        
+        viewModelScope.launch {
+            val newEmoji = if (currentReaction == emoji) null else emoji
+            repository.toggleMessageReaction(session, message.messageId, currentUid, newEmoji)
+        }
+    }
+
+    // ==================== FILE SHARING FUNCTIONALITY ====================
+
+    /**
+     * Send an encrypted file
+     */
+    fun sendFile(uri: Uri, fileName: String, fileType: String, fileSize: Long) {
+        val session = sessionId ?: return
+        val key = sessionKey ?: return
+        
+        viewModelScope.launch {
+            try {
+                Log.d("ChatViewModel", "=== SENDING ENCRYPTED FILE ===")
+                Log.d("ChatViewModel", "File: $fileName ($fileType, $fileSize bytes)")
+                
+                // 1. Read file bytes
+                val context = getApplication<Application>()
+                val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+                val fileBytes = inputStream?.readBytes() ?: throw Exception("Failed to read file")
+                inputStream.close()
+                
+                // 2. Generate random file key (AES-256)
+                val fileSymmetricKey = HybridCrypto.generateRandomKey()
+                
+                // 3. Encrypt file bytes
+                val (encryptedBytes, fileNonce) = HybridCrypto.encryptBytes(fileBytes, fileSymmetricKey)
+                
+                // 4. Encrypt the file key (with session key)
+                // We combine key + nonce for storage
+                val fileKeyAndNonce = fileSymmetricKey + fileNonce
+                val encryptedFileKeyBlob = HybridCrypto.encrypt(
+                    Base64.encodeToString(fileKeyAndNonce, Base64.NO_WRAP),
+                    key
+                )
+                
+                // 5. Upload encrypted file to Storage
+                val downloadUrl = repository.uploadFile(session, fileName, encryptedBytes) { progress ->
+                    Log.d("ChatViewModel", "Upload progress: $progress%")
+                    // Optional: Update UI progress
+                }.getOrThrow()
+                
+                // 6. Send message with file metadata
+                val message = Message(
+                    messageId = UUID.randomUUID().toString(),
+                    senderId = currentUid,
+                    ciphertext = "[File: $fileName]", // Placeholder for search
+                    nonce = "", // Not used for the message body itself when file is present
+                    timestamp = Timestamp.now(),
+                    fileUrl = downloadUrl,
+                    fileName = fileName,
+                    fileType = fileType,
+                    fileSize = fileSize,
+                    encryptedFileKey = Base64.encodeToString(
+                        (encryptedFileKeyBlob.ciphertext + ":" + encryptedFileKeyBlob.nonce).toByteArray(),
+                        Base64.NO_WRAP
+                    )
+                )
+                
+                repository.sendMessage(session, message).getOrThrow()
+                Log.d("ChatViewModel", "File message sent successfully")
+                
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "File send failed", e)
+                _error.value = "Failed to send file: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Download and decrypt file
+     */
+    fun downloadAndDecryptFile(message: Message, onComplete: (ByteArray) -> Unit) {
+        val key = sessionKey ?: return
+        val encryptedKeyBlobBase64 = message.encryptedFileKey ?: return
+        val fileUrl = message.fileUrl ?: return
+        
+        viewModelScope.launch {
+            try {
+                // 1. Decrypt the file key
+                val blobText = String(Base64.decode(encryptedKeyBlobBase64, Base64.NO_WRAP))
+                val parts = blobText.split(":")
+                val encryptedKeyBlob = HybridCrypto.EncryptedMessage(parts[0], parts[1])
+                
+                val decryptedKeyAndNonceBase64 = HybridCrypto.decrypt(encryptedKeyBlob, key)
+                val keyAndNonce = Base64.decode(decryptedKeyAndNonceBase64, Base64.NO_WRAP)
+                
+                val fileSymmetricKey = keyAndNonce.sliceArray(0 until 32)
+                val fileNonce = keyAndNonce.sliceArray(32 until keyAndNonce.size)
+                
+                // 2. Download encrypted bytes
+                val encryptedBytes = repository.downloadFile(fileUrl).getOrThrow()
+                
+                // 3. Decrypt bytes
+                val decryptedBytes = HybridCrypto.decryptBytes(encryptedBytes, fileNonce, fileSymmetricKey)
+                
+                onComplete(decryptedBytes)
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "File download/decrypt failed", e)
+                _error.value = "Failed to download file: ${e.message}"
+            }
+        }
     }
 }

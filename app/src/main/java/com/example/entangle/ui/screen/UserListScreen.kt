@@ -1,5 +1,6 @@
 package com.example.entangle.ui.screen
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -170,19 +171,36 @@ private fun UserCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // User Avatar
-            Surface(
-                modifier = Modifier.size(56.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = user.username.take(1).uppercase(),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
+   // User Avatar with online indicator
+            Box {
+                Surface(
+                    modifier = Modifier.size(56.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = user.username.take(1).uppercase(),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+                
+                // Online status indicator
+                if (user.isOnline) {
+                    Surface(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .align(Alignment.BottomEnd),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.tertiary, // Green
+                        border = BorderStroke(
+                            2.dp,
+                            MaterialTheme.colorScheme.surface
+                        )
+                    ) {}
                 }
             }
             
@@ -206,11 +224,28 @@ private fun UserCard(
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Tap to start secure chat",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
+                
+                // Online status or last seen
+                if (user.isOnline) {
+                    Text(
+                        text = "Online",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                } else if (user.lastSeen != null) {
+                    val lastSeenText = formatLastSeen(user.lastSeen!!.toDate())
+                    Text(
+                        text = lastSeenText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                } else {
+                    Text(
+                        text = "Tap to start secure chat",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
             }
             
             // Arrow Icon
@@ -220,5 +255,25 @@ private fun UserCard(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
             )
         }
+    }
+}
+
+/**
+ * Format last seen time relative to now
+ */
+private fun formatLastSeen(lastSeen: java.util.Date): String {
+    val now = System.currentTimeMillis()
+    val diff = now - lastSeen.time
+    
+    val minutes = (diff / 60000)
+    val hours = (diff / 3600000)
+    val days = (diff / 86400000)
+    
+    return when {
+        minutes < 1 ->  "Just now"
+        minutes < 60 -> "Last seen $minutes min ago"
+        hours < 24 -> "Last seen $hours hr ago"
+        days < 7 -> "Last seen $days days ago"
+        else -> "Last seen long ago"
     }
 }

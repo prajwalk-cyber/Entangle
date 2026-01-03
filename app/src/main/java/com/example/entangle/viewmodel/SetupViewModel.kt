@@ -71,7 +71,25 @@ class SetupViewModel(application: Application) : AndroidViewModel(application) {
                 if (authResult.isFailure) {
                     val error = authResult.exceptionOrNull()
                     Log.e("SetupViewModel", "Authentication failed", error)
-                    throw error ?: Exception("Authentication failed")
+                    
+                    // Provide specific error message for common Firebase issues
+                    val errorMessage = when {
+                        error?.message?.contains("admin", ignoreCase = true) == true -> {
+                            "Anonymous Authentication is not enabled in Firebase Console. " +
+                            "Please enable it: Authentication → Sign-in method → Anonymous → Enable"
+                        }
+                        error?.message?.contains("network", ignoreCase = true) == true -> {
+                            "Network error. Please check your internet connection."
+                        }
+                        error?.message?.contains("API_KEY_INVALID", ignoreCase = true) == true -> {
+                            "Invalid API key. Please check your google-services.json file."
+                        }
+                        else -> {
+                            "Authentication failed: ${error?.message ?: "Unknown error"}"
+                        }
+                    }
+                    
+                    throw Exception(errorMessage)
                 }
                 val uid = authResult.getOrThrow()
                 Log.d("SetupViewModel", "Authentication successful: UID = $uid")

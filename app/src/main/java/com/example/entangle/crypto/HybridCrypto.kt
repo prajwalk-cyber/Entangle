@@ -198,17 +198,49 @@ object HybridCrypto {
      * Decrypt Message with AES-256-GCM
      */
     fun decrypt(encryptedMessage: EncryptedMessage, sessionKey: ByteArray): String {
-        val ciphertext = Base64.decode(encryptedMessage.ciphertext, Base64.NO_WRAP)
-        val nonce = Base64.decode(encryptedMessage.nonce, Base64.NO_WRAP)
+        val plaintext = decryptBytes(
+            Base64.decode(encryptedMessage.ciphertext, Base64.NO_WRAP),
+            Base64.decode(encryptedMessage.nonce, Base64.NO_WRAP),
+            sessionKey
+        )
+        return String(plaintext, Charsets.UTF_8)
+    }
+
+    /**
+     * Encrypt bytes with AES-256-GCM
+     */
+    fun encryptBytes(data: ByteArray, key: ByteArray): Pair<ByteArray, ByteArray> {
+        val nonce = ByteArray(GCM_NONCE_LENGTH)
+        SecureRandom().nextBytes(nonce)
         
         val cipher = Cipher.getInstance(AES_ALGORITHM)
-        val secretKeySpec = SecretKeySpec(sessionKey, "AES")
+        val secretKeySpec = SecretKeySpec(key, "AES")
+        val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, nonce)
+        
+        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, gcmParameterSpec)
+        val ciphertext = cipher.doFinal(data)
+        return Pair(ciphertext, nonce)
+    }
+
+    /**
+     * Decrypt bytes with AES-256-GCM
+     */
+    fun decryptBytes(ciphertext: ByteArray, nonce: ByteArray, key: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance(AES_ALGORITHM)
+        val secretKeySpec = SecretKeySpec(key, "AES")
         val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, nonce)
         
         cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, gcmParameterSpec)
-        val plaintext = cipher.doFinal(ciphertext)
-        
-        return String(plaintext, Charsets.UTF_8)
+        return cipher.doFinal(ciphertext)
+    }
+
+    /**
+     * Generate a random 256-bit key
+     */
+    fun generateRandomKey(): ByteArray {
+        val key = ByteArray(32)
+        SecureRandom().nextBytes(key)
+        return key
     }
     
     // ==================== UTILITY ====================
