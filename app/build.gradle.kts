@@ -58,7 +58,8 @@ dependencies {
     implementation(libs.firebase.storage)
     
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    // Navigation
+    implementation("androidx.navigation:navigation-compose:2.8.0-beta02")
     
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
@@ -73,6 +74,7 @@ dependencies {
     
     // Security & Crypto
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
     
     // Icons
     implementation("androidx.compose.material:material-icons-extended:1.6.3")

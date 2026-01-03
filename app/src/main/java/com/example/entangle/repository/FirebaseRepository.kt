@@ -192,6 +192,38 @@ class FirebaseRepository {
             Result.failure(e)
         }
     }
+
+    /**
+     * listenToSession
+     * Observe session metadata (like pinned messages)
+     */
+    fun listenToSession(sessionId: String): Flow<Session?> = callbackFlow {
+        val listener = sessionsCollection.document(sessionId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                
+                trySend(snapshot?.toObject(Session::class.java))
+            }
+        
+        awaitClose { listener.remove() }
+    }
+
+    /**
+     * Update pinned message
+     */
+    suspend fun updateSessionPin(sessionId: String, messageId: String?): Result<Unit> {
+        return try {
+            sessionsCollection.document(sessionId)
+                .update("pinnedMessageId", messageId)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
     
     // ==================== MESSAGE OPERATIONS ====================
     
@@ -419,6 +451,25 @@ class FirebaseRepository {
                 .update(update)
                 .await()
             
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Delete multiple messages (Batch)
+     */
+    suspend fun deleteMessages(sessionId: String, messageIds: List<String>): Result<Unit> {
+        return try {
+            val batch = firestore.batch()
+            val collectionRef = messagesCollection.document(sessionId).collection("chat")
+            
+            messageIds.forEach { messageId ->
+                batch.delete(collectionRef.document(messageId))
+            }
+            
+            batch.commit().await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

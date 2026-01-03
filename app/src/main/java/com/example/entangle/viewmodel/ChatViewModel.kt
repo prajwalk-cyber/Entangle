@@ -64,6 +64,21 @@ class ChatViewModel(application: Application, private val peerUid: String) : And
 
     private val _currentSearchIndex = MutableStateFlow(-1)
     val currentSearchIndex: StateFlow<Int> = _currentSearchIndex.asStateFlow()
+
+    // Reply state
+    private val _replyToMessage = MutableStateFlow<Message?>(null)
+    val replyToMessage: StateFlow<Message?> = _replyToMessage.asStateFlow()
+
+    // Pinning state
+    private val _pinnedMessageId = MutableStateFlow<String?>(null)
+    val pinnedMessageId: StateFlow<String?> = _pinnedMessageId.asStateFlow()
+    
+    // Selection state
+    private val _isSelectionMode = MutableStateFlow(false)
+    val isSelectionMode: StateFlow<Boolean> = _isSelectionMode.asStateFlow()
+    
+    private val _selectedMessageIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedMessageIds: StateFlow<Set<String>> = _selectedMessageIds.asStateFlow()
     
     private var sessionId: String? = null
     private var sessionKey: ByteArray? = null
@@ -132,6 +147,9 @@ class ChatViewModel(application: Application, private val peerUid: String) : And
                 // Step 4: Listen to encrypted messages
                 Log.d("ChatViewModel", "Step 4: Starting message listener...")
                 listenToMessages()
+                
+                // Step 5: Listen to session metadata (pinning)
+                listenToSession()
                 
                 _isLoading.value = false
                 Log.d("ChatViewModel", "Chat initialized successfully")
@@ -328,14 +346,17 @@ class ChatViewModel(application: Application, private val peerUid: String) : And
                     throw Exception("Encryption verification failed: ${e.message}")
                 }
                 
-                // Step 2: Create message object (encrypted)
                 val message = Message(
                     messageId = UUID.randomUUID().toString(),
                     senderId = currentUid,
                     ciphertext = encryptedMsg.ciphertext,
                     nonce = encryptedMsg.nonce,
-                    timestamp = Timestamp.now()
+                    timestamp = Timestamp.now(),
+                    replyToMessageId = _replyToMessage.value?.messageId
                 )
+
+                // Clear reply state after sending
+                _replyToMessage.value = null
                 
                 Log.d("ChatViewModel", "Uploading to Firebase (session: $session)...")
                 
@@ -550,6 +571,102 @@ class ChatViewModel(application: Application, private val peerUid: String) : And
             } catch (e: Exception) {
                 Log.e("ChatViewModel", "File download/decrypt failed", e)
                 _error.value = "Failed to download file: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * listenToSession
+     * Observe session updates (pinned message)
+     */
+    private fun listenToSession() {
+        val session = sessionId ?: return
+        viewModelScope.launch {
+            repository.listenToSession(session).collect { sessionData ->
+                _pinnedMessageId.value = sessionData?.pinnedMessageId
+            }
+        }
+    }
+
+    // ==================== PINNING ACTIONS ====================
+
+    fun setReplyToMessage(message: Message?) {
+        _replyToMessage.value = message
+    }
+
+    fun clearReplyToMessage() {
+        _replyToMessage.value = null
+    }
+
+    fun pinMessage(messageId: String) {
+        val session = sessionId ?: return
+        viewModelScope.launch {
+            repository.updateSessionPin(session, messageId)
+        }
+    }
+
+    fun unpinMessage() {
+        val session = sessionId ?: return
+        viewModelScope.launch {
+            repository.updateSessionPin(session, null)
+        }
+    }
+
+    // ==================== SELECTION ACTIONS ====================
+
+    fun toggleSelectionMode() {
+        _isSelectionMode.value = !_isSelectionMode.value
+        if (!_isSelectionMode.value) {
+            _selectedMessageIds.value = emptySet()
+        }
+    }
+
+    fun toggleMessageSelection(messageId: String) {
+        val current = _selectedMessageIds.value.toMutableSet()
+        if (current.contains(messageId)) {
+            current.remove(messageId)
+        } else {
+            current.add(messageId)
+        }
+        _selectedMessageIds.value = current
+        
+        // Auto-enable selection mode if not active
+        if (current.isNotEmpty() && !_isSelectionMode.value) {
+            _isSelectionMode.value = true
+        }
+        // Auto-disable if empty
+        if (current.isEmpty()) {
+            _isSelectionMode.value = false
+        }
+    }
+
+    fun deleteSelectedMessages() {
+        val session = sessionId ?: run {
+            Log.e("ChatViewModel", "Cannot delete: sessionId is null")
+            return
+        }
+        val ids = _selectedMessageIds.value.toList()
+        Log.d("ChatViewModel", "Attempting to delete ${ids.size} messages: $ids")
+        
+        if (ids.isEmpty()) {
+            Log.w("ChatViewModel", "Delete called with empty selection")
+            return
+        }
+        
+        viewModelScope.launch {
+            try {
+                val result = repository.deleteMessages(session, ids)
+                if (result.isSuccess) {
+                    Log.d("ChatViewModel", "Successfully deleted messages")
+                } else {
+                    Log.e("ChatViewModel", "Failed to delete messages", result.exceptionOrNull())
+                }
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Error in delete crash", e)
+            } finally {
+                // Clear selection
+                _selectedMessageIds.value = emptySet()
+                _isSelectionMode.value = false
             }
         }
     }

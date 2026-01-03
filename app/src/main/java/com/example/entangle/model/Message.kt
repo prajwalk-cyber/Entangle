@@ -38,6 +38,9 @@ data class Message(
     val fileSize: Long? = null,
     val encryptedFileKey: String? = null, // Base64 key for symmetric file decryption
     
+    // Reply metadata
+    val replyToMessageId: String? = null,
+    
     // Local only - never sent to Firebase
     var decryptedText: String? = null
 ) {
@@ -57,6 +60,7 @@ data class Message(
         fileType?.let { map["fileType"] = it }
         fileSize?.let { map["fileSize"] = it }
         encryptedFileKey?.let { map["encryptedFileKey"] = it }
+        replyToMessageId?.let { map["replyToMessageId"] = it }
         return map
     }
     
